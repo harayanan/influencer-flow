@@ -2,6 +2,26 @@
 
 All notable changes to InfluencerFlow will be documented in this file.
 
+## [0.3.0] - 2026-02-14
+
+### Fixed
+- Video preview now shows uploaded image as video mockup with play button, subtitle preview, duration badge, and controls bar (was showing broken `<video>` tag)
+
+### Added
+- **Indian voices**: 12 voice profiles — Arjun, Meera, Karthik, Ananya, Debashish, Priya, Naveen, Lakshmi, Riya, Vikram, Divya, Suresh
+- **8 Indian languages**: Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, Malayalam, Gujarati
+- Language filter pills in Briefing step — selecting a language filters voice suggestions
+- `IndianLanguage` type and `language` field on `VoiceProfile`
+- **AI Script Generator**: New UI section in Briefing step with topic, tone, and duration inputs
+- API route: `POST /api/generate-script` — Gemini 2.0 Flash powered (template fallback without API key)
+- Installed `@google/generative-ai` SDK
+- Script is editable after AI generation
+
+### Changed
+- Voice profiles expanded from 6 Western to 12 Indian
+- Briefing step layout: AI Script Generator → Script Editor → Language Picker → Voice Picker
+- Generate step accepts `imagePreview` prop for video mockup display
+
 ## [0.2.0] - 2026-02-14
 
 ### Added
@@ -18,7 +38,6 @@ All notable changes to InfluencerFlow will be documented in this file.
 - API route: POST /api/generate-video (job queue stub)
 - API route: GET /api/generate-video/[jobId] (job status polling)
 - Core types (ProjectState, VoiceProfile, BRollClip, StoryboardSegment, etc.)
-- Voice profiles data (6 voices with style/age/gender metadata)
 - Music tracks data (6 tracks with mood matching)
 - Landing page with header, hero section, and violet/indigo gradient theme
 
