@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
-import { Play, Sparkles, Check, Loader2 } from "lucide-react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import { Play, Pause, Sparkles, Check, Loader2, Volume2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProjectState } from "@/lib/types";
 
@@ -39,20 +40,72 @@ const STATUS_CONFIG: Record<
   },
 };
 
+const DEMO_SUBTITLES = [
+  "Welcome to your AI-generated video",
+  "Created with InfluencerFlow",
+  "Lip-synced avatar animation",
+  "Dynamic B-roll transitions",
+  "Professional subtitles included",
+  "Ready for TikTok, Reels & Shorts",
+];
+
 export function GenerateStep({
   progress,
   status,
-  videoUrl,
   imagePreview,
 }: GenerateStepProps) {
   const isGenerating =
     status !== "idle" && status !== "complete" && status !== "error";
   const isComplete = status === "complete";
 
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playProgress, setPlayProgress] = useState(0);
+  const [currentSubtitleIndex, setCurrentSubtitleIndex] = useState(0);
+
   const currentConfig = useMemo(() => {
     if (status === "idle" || status === "error") return null;
     return STATUS_CONFIG[status];
   }, [status]);
+
+  // Simulate video playback
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      setPlayProgress((prev) => {
+        if (prev >= 100) {
+          setIsPlaying(false);
+          return 0;
+        }
+        return prev + 0.5;
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, [isPlaying]);
+
+  // Cycle subtitles during playback
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      setCurrentSubtitleIndex(
+        (prev) => (prev + 1) % DEMO_SUBTITLES.length
+      );
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [isPlaying]);
+
+  const togglePlay = useCallback(() => {
+    if (!isComplete || !imagePreview) return;
+    setIsPlaying((prev) => !prev);
+    if (playProgress >= 100) setPlayProgress(0);
+  }, [isComplete, imagePreview, playProgress]);
+
+  const formatPlayTime = (pct: number) => {
+    const totalSeconds = 90;
+    const current = Math.floor((pct / 100) * totalSeconds);
+    const m = Math.floor(current / 60);
+    const s = current % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
   // Progress steps for the stepper
   const steps = [
@@ -74,7 +127,7 @@ export function GenerateStep({
         </h2>
         <p className="text-muted-foreground text-sm max-w-md">
           {isComplete
-            ? "Your AI-generated video is ready for review."
+            ? "Click the video preview to play. Proceed to Refine to customize."
             : status === "idle"
               ? "Click generate to begin creating your video."
               : "Sit tight while we bring your vision to life."}
@@ -128,70 +181,145 @@ export function GenerateStep({
           </div>
 
           {/* Progress bar */}
-          <div className="space-y-2">
-            <Progress
-              value={progress}
-              className="h-2.5 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-violet-500 [&_[data-slot=progress-indicator]]:to-indigo-500 [&_[data-slot=progress-indicator]]:transition-all [&_[data-slot=progress-indicator]]:duration-700"
-            />
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-foreground">
-                {currentConfig?.label}
-              </span>
-              <span className="text-xs font-mono text-muted-foreground tabular-nums">
-                {Math.round(progress)}%
-              </span>
+          {!isComplete && (
+            <div className="space-y-2">
+              <Progress
+                value={progress}
+                className="h-2.5 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-violet-500 [&_[data-slot=progress-indicator]]:to-indigo-500 [&_[data-slot=progress-indicator]]:transition-all [&_[data-slot=progress-indicator]]:duration-700"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-foreground">
+                  {currentConfig?.label}
+                </span>
+                <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                  {Math.round(progress)}%
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {currentConfig?.detail}
+              </p>
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              {currentConfig?.detail}
-            </p>
-          </div>
+          )}
         </div>
       )}
 
       {/* Video player area */}
       <div
         className={cn(
-          "relative w-64 overflow-hidden rounded-2xl border-2 transition-all duration-500 bg-black",
+          "relative overflow-hidden rounded-2xl border-2 transition-all duration-500 bg-black cursor-pointer",
           isComplete
-            ? "border-violet-300 shadow-lg shadow-violet-100/50"
+            ? "border-violet-300 shadow-xl shadow-violet-100/50 w-72"
             : isGenerating
-              ? "border-violet-200/50"
-              : "border-muted"
+              ? "border-violet-200/50 w-64"
+              : "border-muted w-64"
         )}
         style={{ aspectRatio: "9/16" }}
+        onClick={togglePlay}
       >
         {isComplete && imagePreview ? (
-          /* Completed: show video preview mockup using uploaded image */
-          <div className="relative h-full w-full">
+          /* Completed: interactive video preview */
+          <div className="relative h-full w-full overflow-hidden">
+            {/* Image with Ken Burns effect when playing */}
             <img
               src={imagePreview}
               alt="Generated video preview"
-              className="h-full w-full object-cover"
+              className={cn(
+                "h-full w-full object-cover transition-transform duration-[10000ms] ease-linear",
+                isPlaying ? "scale-110 translate-y-[-3%]" : "scale-100"
+              )}
             />
-            {/* Video overlay effects */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
-            {/* Play button overlay */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex items-center justify-center rounded-full bg-white/20 backdrop-blur-sm p-4 border border-white/30 shadow-xl">
-                <Play className="size-8 text-white fill-white" />
+
+            {/* Dark overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/30" />
+
+            {/* Play/Pause button overlay */}
+            <div
+              className={cn(
+                "absolute inset-0 flex items-center justify-center transition-opacity duration-300",
+                isPlaying ? "opacity-0 hover:opacity-100" : "opacity-100"
+              )}
+            >
+              <div className="flex items-center justify-center rounded-full bg-white/20 backdrop-blur-sm p-4 border border-white/30 shadow-xl transition-transform hover:scale-110">
+                {isPlaying ? (
+                  <Pause className="size-8 text-white fill-white" />
+                ) : (
+                  <Play className="size-8 text-white fill-white ml-1" />
+                )}
               </div>
             </div>
-            {/* Subtitle preview at bottom */}
-            <div className="absolute bottom-12 inset-x-4 text-center">
-              <span className="inline-block bg-black/70 px-3 py-1.5 rounded-lg text-white text-xs font-bold tracking-wide">
-                Your AI video is ready
+
+            {/* Animated subtitle */}
+            <div
+              className={cn(
+                "absolute bottom-14 inset-x-3 text-center transition-all duration-500",
+                isPlaying
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-70 translate-y-0"
+              )}
+            >
+              <span
+                key={currentSubtitleIndex}
+                className="inline-block bg-black/80 px-3 py-2 rounded-lg text-white text-xs font-bold tracking-wide animate-in fade-in slide-in-from-bottom-2 duration-500"
+              >
+                {isPlaying
+                  ? DEMO_SUBTITLES[currentSubtitleIndex]
+                  : "Click to play preview"}
               </span>
             </div>
-            {/* Duration badge */}
-            <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-white text-[10px] font-mono">
-              0:00 / 1:30
-            </div>
-            {/* Video controls bar */}
-            <div className="absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-black/80 to-transparent flex items-end px-3 pb-1.5 gap-2">
-              <div className="flex-1 h-1 rounded-full bg-white/30 overflow-hidden">
-                <div className="h-full w-0 bg-violet-500 rounded-full" />
+
+            {/* Top bar: duration + sound */}
+            <div className="absolute top-3 inset-x-3 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1">
+                <div
+                  className={cn(
+                    "size-2 rounded-full",
+                    isPlaying ? "bg-red-500 animate-pulse" : "bg-white/40"
+                  )}
+                />
+                <span className="text-white text-[10px] font-mono">
+                  {isPlaying ? "LIVE PREVIEW" : "READY"}
+                </span>
               </div>
-              <span className="text-[9px] text-white/60 font-mono">HD</span>
+              <div className="flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1">
+                <Volume2 className="size-3 text-white/70" />
+                <span className="text-white text-[10px] font-mono">HD</span>
+              </div>
+            </div>
+
+            {/* Audio waveform animation */}
+            {isPlaying && (
+              <div className="absolute top-12 right-3 flex items-end gap-0.5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-0.5 bg-violet-400 rounded-full"
+                    style={{
+                      animation: `pulse ${0.4 + i * 0.1}s ease-in-out infinite alternate`,
+                      height: `${6 + Math.sin(i * 1.5) * 6}px`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Video controls bar at bottom */}
+            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent pt-6 pb-2 px-3 space-y-1.5">
+              {/* Progress bar */}
+              <div className="h-1 rounded-full bg-white/20 overflow-hidden">
+                <div
+                  className="h-full bg-violet-500 rounded-full transition-all duration-100 ease-linear"
+                  style={{ width: `${playProgress}%` }}
+                />
+              </div>
+              {/* Time */}
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-white/70 font-mono tabular-nums">
+                  {formatPlayTime(playProgress)}
+                </span>
+                <span className="text-[9px] text-white/70 font-mono tabular-nums">
+                  1:30
+                </span>
+              </div>
             </div>
           </div>
         ) : (
@@ -223,22 +351,12 @@ export function GenerateStep({
                       key={i}
                       className="w-1 rounded-full bg-violet-400/60"
                       style={{
-                        height: `${12 + Math.random() * 20}px`,
+                        height: `${12 + Math.sin(i * 1.2) * 10}px`,
                         animation: `pulse ${0.8 + i * 0.15}s ease-in-out infinite alternate`,
                       }}
                     />
                   ))}
                 </div>
-              </>
-            ) : isComplete ? (
-              <>
-                {/* Complete but no URL */}
-                <div className="flex items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 p-5 shadow-lg shadow-violet-500/30">
-                  <Play className="size-10 text-white fill-white" />
-                </div>
-                <p className="text-sm font-semibold text-white/90">
-                  Ready to play
-                </p>
               </>
             ) : status === "error" ? (
               <>
@@ -269,15 +387,29 @@ export function GenerateStep({
         )}
       </div>
 
-      {/* Completion message */}
+      {/* Action buttons when complete */}
       {isComplete && (
-        <div className="flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="flex items-center justify-center rounded-full bg-emerald-500 p-1">
-            <Check className="size-3 text-white" />
+        <div className="flex flex-col items-center gap-3 w-full">
+          <div className="flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <div className="flex items-center justify-center rounded-full bg-emerald-500 p-1">
+              <Check className="size-3 text-white" />
+            </div>
+            <span className="text-sm font-medium text-emerald-700">
+              Video generated successfully — click to preview
+            </span>
           </div>
-          <span className="text-sm font-medium text-emerald-700">
-            Video generated successfully
-          </span>
+
+          {!isPlaying && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={togglePlay}
+              className="gap-2 text-violet-600 border-violet-200 hover:bg-violet-50"
+            >
+              <Play className="size-3.5 fill-violet-600" />
+              Play Preview
+            </Button>
+          )}
         </div>
       )}
     </div>
