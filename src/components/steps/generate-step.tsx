@@ -10,6 +10,7 @@ interface GenerateStepProps {
   progress: number;
   status: ProjectState["generationStatus"];
   videoUrl: string | null;
+  imagePreview: string | null;
 }
 
 const STATUS_CONFIG: Record<
@@ -42,6 +43,7 @@ export function GenerateStep({
   progress,
   status,
   videoUrl,
+  imagePreview,
 }: GenerateStepProps) {
   const isGenerating =
     status !== "idle" && status !== "complete" && status !== "error";
@@ -158,14 +160,40 @@ export function GenerateStep({
         )}
         style={{ aspectRatio: "9/16" }}
       >
-        {isComplete && videoUrl ? (
-          /* Completed: show video */
-          <video
-            src={videoUrl}
-            className="h-full w-full object-cover"
-            controls
-            playsInline
-          />
+        {isComplete && imagePreview ? (
+          /* Completed: show video preview mockup using uploaded image */
+          <div className="relative h-full w-full">
+            <img
+              src={imagePreview}
+              alt="Generated video preview"
+              className="h-full w-full object-cover"
+            />
+            {/* Video overlay effects */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+            {/* Play button overlay */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex items-center justify-center rounded-full bg-white/20 backdrop-blur-sm p-4 border border-white/30 shadow-xl">
+                <Play className="size-8 text-white fill-white" />
+              </div>
+            </div>
+            {/* Subtitle preview at bottom */}
+            <div className="absolute bottom-12 inset-x-4 text-center">
+              <span className="inline-block bg-black/70 px-3 py-1.5 rounded-lg text-white text-xs font-bold tracking-wide">
+                Your AI video is ready
+              </span>
+            </div>
+            {/* Duration badge */}
+            <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1 text-white text-[10px] font-mono">
+              0:00 / 1:30
+            </div>
+            {/* Video controls bar */}
+            <div className="absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-black/80 to-transparent flex items-end px-3 pb-1.5 gap-2">
+              <div className="flex-1 h-1 rounded-full bg-white/30 overflow-hidden">
+                <div className="h-full w-0 bg-violet-500 rounded-full" />
+              </div>
+              <span className="text-[9px] text-white/60 font-mono">HD</span>
+            </div>
+          </div>
         ) : (
           /* Generating or idle: show placeholder */
           <div className="flex h-full w-full flex-col items-center justify-center gap-4">

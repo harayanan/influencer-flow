@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import {
   Mic,
   Volume2,
@@ -8,14 +8,20 @@ import {
   FileText,
   User,
   UserCircle,
+  Globe,
+  Wand2,
+  Loader2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import type { VoiceProfile } from "@/lib/types";
+import type { VoiceProfile, IndianLanguage } from "@/lib/types";
+import { indianLanguages } from "@/lib/voices";
 
 interface BriefingStepProps {
   script: string;
@@ -23,6 +29,8 @@ interface BriefingStepProps {
   selectedVoice: VoiceProfile | null;
   suggestedVoices: VoiceProfile[];
   onVoiceSelect: (v: VoiceProfile) => void;
+  selectedLanguage: IndianLanguage | null;
+  onLanguageChange: (lang: IndianLanguage) => void;
 }
 
 const STYLE_COLORS: Record<VoiceProfile["style"], string> = {
@@ -37,6 +45,147 @@ const STYLE_COLORS: Record<VoiceProfile["style"], string> = {
     "bg-pink-100 text-pink-700 border-pink-200",
 };
 
+const TONE_OPTIONS: { value: string; label: string }[] = [
+  { value: "excited", label: "Excited" },
+  { value: "educational", label: "Educational" },
+  { value: "calm", label: "Calm" },
+  { value: "professional", label: "Professional" },
+  { value: "friendly", label: "Friendly" },
+];
+
+const DURATION_OPTIONS = [
+  { value: 60, label: "60s (~150 words)" },
+  { value: 90, label: "90s (~225 words)" },
+];
+
+function ScriptGenerator({
+  onScriptGenerated,
+  selectedLanguage,
+}: {
+  onScriptGenerated: (script: string) => void;
+  selectedLanguage: IndianLanguage | null;
+}) {
+  const [topic, setTopic] = useState("");
+  const [tone, setTone] = useState("professional");
+  const [duration, setDuration] = useState<60 | 90>(60);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerate = useCallback(async () => {
+    if (!topic.trim()) return;
+    setIsGenerating(true);
+    try {
+      const res = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          tone,
+          duration,
+          language: selectedLanguage || "English",
+        }),
+      });
+      const data = await res.json();
+      if (data.script) {
+        onScriptGenerated(data.script);
+      }
+    } catch {
+      // Silent fail — user can write manually
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [topic, tone, duration, selectedLanguage, onScriptGenerated]);
+
+  return (
+    <div className="space-y-4 rounded-xl border-2 border-dashed border-violet-200 bg-violet-50/30 p-5">
+      <div className="flex items-center gap-2">
+        <Wand2 className="size-4 text-violet-600" />
+        <Label className="text-sm font-semibold">AI Script Generator</Label>
+        <Badge className="text-[10px] bg-violet-100 text-violet-700 border-violet-200">
+          Gemini
+        </Badge>
+      </div>
+
+      <div className="space-y-3">
+        <Input
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          placeholder="What's your video about? e.g. '5 morning habits for productivity'"
+          className="text-sm bg-white focus-visible:border-violet-400 focus-visible:ring-violet-400/20"
+        />
+
+        <div className="flex gap-3">
+          {/* Tone picker */}
+          <div className="flex-1 space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground">
+              Tone
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {TONE_OPTIONS.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setTone(t.value)}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[10px] font-medium border transition-all",
+                    tone === t.value
+                      ? "border-violet-500 bg-violet-100 text-violet-700"
+                      : "border-muted bg-white text-muted-foreground hover:border-violet-300"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Duration picker */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground">
+              Duration
+            </label>
+            <div className="flex gap-1.5">
+              {DURATION_OPTIONS.map((d) => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setDuration(d.value as 60 | 90)}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[10px] font-medium border transition-all",
+                    duration === d.value
+                      ? "border-violet-500 bg-violet-100 text-violet-700"
+                      : "border-muted bg-white text-muted-foreground hover:border-violet-300"
+                  )}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <Button
+          onClick={handleGenerate}
+          disabled={!topic.trim() || isGenerating}
+          size="sm"
+          className="w-full gap-2 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" />
+              Generating script...
+            </>
+          ) : (
+            <>
+              <Wand2 className="size-3.5" />
+              Generate Script
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function GenderIcon({ gender }: { gender: VoiceProfile["gender"] }) {
   if (gender === "male") return <User className="size-3.5" />;
   if (gender === "female") return <UserCircle className="size-3.5" />;
@@ -49,6 +198,8 @@ export function BriefingStep({
   selectedVoice,
   suggestedVoices,
   onVoiceSelect,
+  selectedLanguage,
+  onLanguageChange,
 }: BriefingStepProps) {
   const wordCount = useMemo(() => {
     const trimmed = script.trim();
@@ -83,11 +234,22 @@ export function BriefingStep({
         </p>
       </div>
 
+      {/* AI Script Generator */}
+      <ScriptGenerator
+        onScriptGenerated={onScriptChange}
+        selectedLanguage={selectedLanguage}
+      />
+
+      <Separator />
+
       {/* Script Section */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <FileText className="size-4 text-violet-600" />
           <Label className="text-sm font-semibold">Video Script</Label>
+          <Badge variant="outline" className="text-[10px]">
+            Edit below or generate above
+          </Badge>
         </div>
 
         <Textarea
@@ -171,11 +333,47 @@ export function BriefingStep({
 
       <Separator />
 
+      {/* Language Selection */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Globe className="size-4 text-violet-600" />
+          <Label className="text-sm font-semibold">Language</Label>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {indianLanguages.map((lang) => {
+            const isSelected = selectedLanguage === lang;
+            return (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => onLanguageChange(lang)}
+                className={cn(
+                  "rounded-full px-3.5 py-1.5 text-xs font-medium border transition-all duration-200",
+                  isSelected
+                    ? "border-violet-500 bg-violet-100 text-violet-700 shadow-sm"
+                    : "border-muted hover:border-violet-300 hover:bg-violet-50/50 text-muted-foreground"
+                )}
+              >
+                {lang}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <Separator />
+
       {/* Voice Selection Section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Volume2 className="size-4 text-violet-600" />
           <Label className="text-sm font-semibold">Choose a Voice</Label>
+          {selectedLanguage && (
+            <Badge variant="outline" className="text-[10px]">
+              {selectedLanguage}
+            </Badge>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -215,7 +413,7 @@ export function BriefingStep({
                   <div>
                     <p className="text-sm font-semibold">{voice.name}</p>
                     <p className="text-[10px] text-muted-foreground capitalize">
-                      {voice.age} {voice.gender}
+                      {voice.language} · {voice.age} {voice.gender}
                     </p>
                   </div>
                 </div>

@@ -21,6 +21,7 @@ import { RefineStep } from "@/components/steps/refine-step";
 import type {
   ProjectState,
   VoiceProfile,
+  IndianLanguage,
   StoryboardSegment,
   SubtitleStyle,
   SubtitleSegment,
@@ -56,6 +57,8 @@ const initialState: ProjectState = {
 
 export function Wizard() {
   const [state, setState] = useState<ProjectState>(initialState);
+  const [selectedLanguage, setSelectedLanguage] =
+    useState<IndianLanguage | null>(null);
 
   const updateState = useCallback(
     (updates: Partial<ProjectState>) =>
@@ -69,6 +72,17 @@ export function Wizard() {
         image: file,
         imagePreview: preview,
         suggestedVoices: suggestVoices(),
+      });
+    },
+    [updateState]
+  );
+
+  const handleLanguageChange = useCallback(
+    (lang: IndianLanguage) => {
+      setSelectedLanguage(lang);
+      updateState({
+        suggestedVoices: suggestVoices(undefined, undefined, lang),
+        selectedVoice: null,
       });
     },
     [updateState]
@@ -190,7 +204,7 @@ export function Wizard() {
       }
     }
 
-    updateState({ videoUrl: "/api/generate-video/demo-preview" });
+    updateState({ videoUrl: "generated" });
   }, [updateState]);
 
   const goNext = useCallback(async () => {
@@ -295,6 +309,8 @@ export function Wizard() {
             selectedVoice={state.selectedVoice}
             suggestedVoices={state.suggestedVoices}
             onVoiceSelect={handleVoiceSelect}
+            selectedLanguage={selectedLanguage}
+            onLanguageChange={handleLanguageChange}
           />
         )}
         {state.step === 3 && (
@@ -305,6 +321,7 @@ export function Wizard() {
             progress={state.generationProgress}
             status={state.generationStatus}
             videoUrl={state.videoUrl}
+            imagePreview={state.imagePreview}
           />
         )}
         {state.step === 5 && (

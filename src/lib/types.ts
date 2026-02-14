@@ -1,9 +1,20 @@
+export type IndianLanguage =
+  | "Hindi"
+  | "Tamil"
+  | "Telugu"
+  | "Bengali"
+  | "Marathi"
+  | "Kannada"
+  | "Malayalam"
+  | "Gujarati";
+
 export interface VoiceProfile {
   id: string;
   name: string;
   gender: "male" | "female" | "neutral";
   age: "young" | "adult" | "mature";
   style: "excited" | "educational" | "calm" | "professional" | "friendly";
+  language: IndianLanguage;
   pitch: number; // 0-100
   stability: number; // 0-100
   preview_url?: string;
