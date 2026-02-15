@@ -1,32 +1,22 @@
 import { NextResponse } from "next/server";
+import { getJob, updateJob } from "@/lib/job-store";
+import { checkVideoStatus } from "@/lib/gemini";
 
 interface JobStatusResponse {
   jobId: string;
   status: "queued" | "processing" | "complete" | "error";
   progress: number;
-  videoUrl?: string;
+  videoDataUrl?: string;
   message?: string;
 }
 
-// TODO: Replace mock status with real job tracking
-// In production, store job state in a database (e.g. Supabase) or use
-// the HeyGen/D-ID webhook callback to update job status.
-// For now, we simulate a processing state with deterministic progress
-// based on the job ID to make polling feel realistic.
-
-/**
- * Derive a deterministic mock progress value from the job ID.
- * This ensures repeated polls for the same job return consistent results
- * within a short time window, while different jobs show different progress.
- */
 function getMockProgress(jobId: string): JobStatusResponse {
-  // Use a simple hash of the job ID + current minute to create progress
-  // that slowly advances on subsequent polls
-  const hash = jobId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hash = jobId
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const minutesSinceEpoch = Math.floor(Date.now() / 60000);
   const progressSeed = (hash + minutesSinceEpoch) % 100;
 
-  // Simulate different stages based on progress
   if (progressSeed < 15) {
     return {
       jobId,
@@ -41,28 +31,16 @@ function getMockProgress(jobId: string): JobStatusResponse {
       jobId,
       status: "complete",
       progress: 100,
-      videoUrl: `https://storage.example.com/videos/${jobId}/final-output.mp4`,
-      message: "Video generation complete. Ready for download.",
+      message: "Video generation complete (mock). Ready for preview.",
     };
   }
 
-  // Processing: map the seed to a 5-95% progress range
   const progress = Math.round(((progressSeed - 15) / 70) * 95) + 5;
-  const stages = [
-    { threshold: 25, message: "Synthesizing voice audio..." },
-    { threshold: 45, message: "Generating talking-head animation..." },
-    { threshold: 65, message: "Compositing B-roll footage..." },
-    { threshold: 80, message: "Applying subtitles and effects..." },
-    { threshold: 100, message: "Finalizing video render..." },
-  ];
-
-  const stage = stages.find((s) => progress <= s.threshold) || stages[stages.length - 1];
-
   return {
     jobId,
     status: "processing",
     progress,
-    message: stage.message,
+    message: "Generating animated video clip...",
   };
 }
 
@@ -73,28 +51,110 @@ export async function GET(
   try {
     const { jobId } = await params;
 
-    if (!jobId || jobId.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Missing job ID parameter." },
-        { status: 400 }
-      );
-    }
-
-    // Validate job ID format (should start with "job-")
-    if (!jobId.startsWith("job-")) {
+    if (!jobId || !jobId.startsWith("job-")) {
       return NextResponse.json(
         { error: "Invalid job ID format." },
         { status: 400 }
       );
     }
 
-    // TODO: Look up actual job status from database
-    // const job = await supabase.from("generation_jobs").select("*").eq("id", jobId).single();
-    // if (!job.data) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+    const job = getJob(jobId);
 
-    const statusResponse = getMockProgress(jobId);
+    // No job in store — fall back to mock progress
+    if (!job) {
+      return NextResponse.json(getMockProgress(jobId));
+    }
 
-    return NextResponse.json(statusResponse);
+    // Mock operation — use deterministic mock
+    if (job.operationName === "mock-operation") {
+      const mock = getMockProgress(jobId);
+      if (mock.status === "complete") {
+        updateJob(jobId, { status: "complete", progress: 100 });
+      }
+      return NextResponse.json(mock);
+    }
+
+    // Already complete
+    if (job.status === "complete") {
+      return NextResponse.json({
+        jobId,
+        status: "complete",
+        progress: 100,
+        videoDataUrl: job.videoDataUrl,
+        message: "Video generation complete.",
+      });
+    }
+
+    // Already errored
+    if (job.status === "error") {
+      return NextResponse.json({
+        jobId,
+        status: "error",
+        progress: job.progress,
+        message: job.error || "Video generation failed.",
+      });
+    }
+
+    // Poll Veo for real status
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(getMockProgress(jobId));
+    }
+
+    try {
+      const veoStatus = await checkVideoStatus(job.operationName);
+
+      if (veoStatus.error) {
+        updateJob(jobId, {
+          status: "error",
+          error: veoStatus.error,
+        });
+        return NextResponse.json({
+          jobId,
+          status: "error",
+          progress: job.progress,
+          message: veoStatus.error,
+        });
+      }
+
+      if (veoStatus.done && veoStatus.videoBase64) {
+        const videoDataUrl = `data:video/mp4;base64,${veoStatus.videoBase64}`;
+        updateJob(jobId, {
+          status: "complete",
+          progress: 100,
+          videoDataUrl,
+        });
+        return NextResponse.json({
+          jobId,
+          status: "complete",
+          progress: 100,
+          videoDataUrl,
+          message: "Video generation complete.",
+        });
+      }
+
+      // Still processing
+      const newProgress = Math.min(
+        (job.progress || 10) + Math.floor(Math.random() * 10),
+        90
+      );
+      updateJob(jobId, { status: "processing", progress: newProgress });
+
+      return NextResponse.json({
+        jobId,
+        status: "processing",
+        progress: newProgress,
+        message: "Generating animated video clip...",
+      });
+    } catch (pollError) {
+      console.error("Veo poll error:", pollError);
+      // Don't fail the job on transient poll errors
+      return NextResponse.json({
+        jobId,
+        status: "processing",
+        progress: job.progress || 10,
+        message: "Generating animated video clip...",
+      });
+    }
   } catch (error) {
     console.error("Error checking job status:", error);
     return NextResponse.json(

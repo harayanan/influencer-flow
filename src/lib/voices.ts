@@ -10,6 +10,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Hindi",
     pitch: 55,
     stability: 70,
+    geminiVoice: "Puck",
+    stylePrefix: "Say excitedly and energetically:",
   },
   {
     id: "v2",
@@ -20,6 +22,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Hindi",
     pitch: 60,
     stability: 80,
+    geminiVoice: "Kore",
+    stylePrefix: "Say in a professional and confident tone:",
   },
   {
     id: "v3",
@@ -30,6 +34,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Tamil",
     pitch: 48,
     stability: 88,
+    geminiVoice: "Charon",
+    stylePrefix: "Say in a clear, educational manner:",
   },
   {
     id: "v4",
@@ -40,6 +46,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Telugu",
     pitch: 62,
     stability: 75,
+    geminiVoice: "Aoede",
+    stylePrefix: "Say warmly and in a friendly way:",
   },
   {
     id: "v5",
@@ -50,6 +58,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Bengali",
     pitch: 40,
     stability: 90,
+    geminiVoice: "Orus",
+    stylePrefix: "Say calmly and thoughtfully:",
   },
   {
     id: "v6",
@@ -60,6 +70,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Marathi",
     pitch: 58,
     stability: 72,
+    geminiVoice: "Leda",
+    stylePrefix: "Say with excitement and enthusiasm:",
   },
   {
     id: "v7",
@@ -70,6 +82,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Kannada",
     pitch: 52,
     stability: 82,
+    geminiVoice: "Fenrir",
+    stylePrefix: "Say in a professional and composed tone:",
   },
   {
     id: "v8",
@@ -80,6 +94,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Malayalam",
     pitch: 55,
     stability: 86,
+    geminiVoice: "Kore",
+    stylePrefix: "Say in a clear, instructive manner:",
   },
   {
     id: "v9",
@@ -90,6 +106,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Gujarati",
     pitch: 64,
     stability: 68,
+    geminiVoice: "Aoede",
+    stylePrefix: "Say with high energy and excitement:",
   },
   {
     id: "v10",
@@ -100,6 +118,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Hindi",
     pitch: 45,
     stability: 92,
+    geminiVoice: "Charon",
+    stylePrefix: "Say in a calm, measured tone:",
   },
   {
     id: "v11",
@@ -110,6 +130,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Tamil",
     pitch: 58,
     stability: 78,
+    geminiVoice: "Leda",
+    stylePrefix: "Say warmly and conversationally:",
   },
   {
     id: "v12",
@@ -120,6 +142,8 @@ export const voiceProfiles: VoiceProfile[] = [
     language: "Telugu",
     pitch: 42,
     stability: 88,
+    geminiVoice: "Orus",
+    stylePrefix: "Say in a professional, authoritative tone:",
   },
 ];
 

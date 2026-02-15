@@ -1,25 +1,15 @@
 import { NextResponse } from "next/server";
-import type { StoryboardSegment, SubtitleStyle } from "@/lib/types";
+import { generateVideoFromImage } from "@/lib/gemini";
+import { createJob } from "@/lib/job-store";
 
-// TODO: Integrate HeyGen or D-ID API for avatar lip-sync video generation
-// import HeyGen from "heygen-sdk";
-// const heygen = new HeyGen({ apiKey: process.env.HEYGEN_API_KEY! });
-
-// TODO: Integrate ElevenLabs API for voice synthesis
-// import { ElevenLabsClient } from "elevenlabs";
-// const elevenlabs = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY! });
+export const maxDuration = 60;
 
 interface GenerateVideoRequest {
-  imageUrl: string;
-  script: string;
-  voiceId: string;
-  storyboard: StoryboardSegment[];
-  subtitleStyle: SubtitleStyle;
+  imageBase64: string;
+  prompt: string;
+  durationSeconds?: number;
 }
 
-/**
- * Generate a unique job ID for tracking video generation progress.
- */
 function generateJobId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
@@ -30,83 +20,59 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as GenerateVideoRequest;
 
-    // Validate required fields
-    if (!body.imageUrl || typeof body.imageUrl !== "string") {
+    if (!body.imageBase64 || typeof body.imageBase64 !== "string") {
       return NextResponse.json(
-        { error: "Missing or invalid 'imageUrl' field." },
+        { error: "Missing or invalid 'imageBase64' field." },
         { status: 400 }
       );
     }
 
-    if (!body.script || typeof body.script !== "string") {
+    if (!body.prompt || typeof body.prompt !== "string") {
       return NextResponse.json(
-        { error: "Missing or invalid 'script' field." },
+        { error: "Missing or invalid 'prompt' field." },
         { status: 400 }
       );
     }
-
-    if (!body.voiceId || typeof body.voiceId !== "string") {
-      return NextResponse.json(
-        { error: "Missing or invalid 'voiceId' field." },
-        { status: 400 }
-      );
-    }
-
-    if (!body.storyboard || !Array.isArray(body.storyboard)) {
-      return NextResponse.json(
-        { error: "Missing or invalid 'storyboard' field. Expected an array." },
-        { status: 400 }
-      );
-    }
-
-    if (!body.subtitleStyle || typeof body.subtitleStyle !== "string") {
-      return NextResponse.json(
-        { error: "Missing or invalid 'subtitleStyle' field." },
-        { status: 400 }
-      );
-    }
-
-    const validStyles: SubtitleStyle[] = ["hormozi", "minimalist", "bold", "karaoke"];
-    if (!validStyles.includes(body.subtitleStyle)) {
-      return NextResponse.json(
-        { error: `Invalid 'subtitleStyle'. Must be one of: ${validStyles.join(", ")}.` },
-        { status: 400 }
-      );
-    }
-
-    // TODO: Full generation pipeline:
-    // 1. Send script + voiceId to ElevenLabs to synthesize audio
-    //    const audioStream = await elevenlabs.textToSpeech.convert(body.voiceId, {
-    //      text: body.script,
-    //      model_id: "eleven_multilingual_v2",
-    //    });
-    //
-    // 2. Send image + audio to HeyGen/D-ID for talking-head generation
-    //    const talkingHead = await heygen.createVideo({
-    //      avatar: { type: "image", url: body.imageUrl },
-    //      audio: audioStream,
-    //    });
-    //
-    // 3. Fetch B-roll clips for storyboard segments of type "broll"
-    //
-    // 4. Composite: merge talking-head, B-roll, subtitles, and music
-    //
-    // 5. Apply subtitle style overlay
-    //
-    // 6. Return final video URL
 
     const jobId = generateJobId();
+    const duration = body.durationSeconds || 8;
 
-    // Estimate generation time based on script length (roughly 1 min per 30 words of script)
-    const wordCount = body.script.split(/\s+/).length;
-    const estimatedTime = Math.max(60, Math.min(300, Math.round(wordCount * 2)));
+    if (!process.env.GEMINI_API_KEY) {
+      // Mock fallback: create a job that will resolve via mock polling
+      createJob(jobId, "mock-operation");
+      return NextResponse.json({
+        jobId,
+        status: "queued" as const,
+        estimatedTime: 120,
+        message: `Video generation job ${jobId} queued (mock mode).`,
+      });
+    }
 
-    return NextResponse.json({
-      jobId,
-      status: "queued" as const,
-      estimatedTime,
-      message: `Video generation job ${jobId} has been queued. Check status at /api/generate-video/${jobId}.`,
-    });
+    try {
+      const { operationName } = await generateVideoFromImage(
+        body.prompt,
+        body.imageBase64,
+        duration
+      );
+
+      createJob(jobId, operationName);
+
+      return NextResponse.json({
+        jobId,
+        status: "queued" as const,
+        estimatedTime: 120,
+        message: `Video generation job ${jobId} started via Veo.`,
+      });
+    } catch (veoError) {
+      console.error("Veo API error, creating mock job:", veoError);
+      createJob(jobId, "mock-operation");
+      return NextResponse.json({
+        jobId,
+        status: "queued" as const,
+        estimatedTime: 120,
+        message: `Video generation job ${jobId} queued (Veo unavailable, mock mode).`,
+      });
+    }
   } catch (error) {
     console.error("Error initiating video generation:", error);
     return NextResponse.json(

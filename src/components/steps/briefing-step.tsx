@@ -11,6 +11,7 @@ import {
   Globe,
   Wand2,
   Loader2,
+  Play,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,8 @@ const DURATION_OPTIONS = [
   { value: 60, label: "60s (~150 words)" },
   { value: 90, label: "90s (~225 words)" },
 ];
+
+const VOICE_SAMPLE_TEXT = "Hello! I'm your AI voice. Let me show you how I sound when narrating your video.";
 
 function ScriptGenerator({
   onScriptGenerated,
@@ -192,6 +195,55 @@ function GenderIcon({ gender }: { gender: VoiceProfile["gender"] }) {
   return <Mic className="size-3.5" />;
 }
 
+function VoicePreviewButton({ voice }: { voice: VoiceProfile }) {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handlePreview = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation(); // Don't trigger voice selection
+      setIsLoading(true);
+      try {
+        const res = await fetch("/api/generate-audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            script: VOICE_SAMPLE_TEXT,
+            geminiVoice: voice.geminiVoice,
+            stylePrefix: voice.stylePrefix,
+            language: voice.language,
+          }),
+        });
+        const data = await res.json();
+        if (data.audioDataUrl) {
+          const audio = new Audio(data.audioDataUrl);
+          audio.play().catch(() => {});
+        }
+      } catch {
+        // Silent fail
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [voice]
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={handlePreview}
+      disabled={isLoading}
+      className="flex items-center gap-1.5 text-[10px] text-violet-600 hover:text-violet-700 transition-colors disabled:opacity-50"
+    >
+      {isLoading ? (
+        <Loader2 className="size-3 animate-spin" />
+      ) : (
+        <Play className="size-3 fill-violet-600" />
+      )}
+      <span>{isLoading ? "Generating..." : "Preview voice"}</span>
+    </button>
+  );
+}
+
 export function BriefingStep({
   script,
   onScriptChange,
@@ -217,7 +269,6 @@ export function BriefingStep({
   }, [wordCount]);
 
   const estimatedSeconds = useMemo(() => {
-    // Average speaking rate: ~2.5 words per second
     return Math.round(wordCount / 2.5);
   }, [wordCount]);
 
@@ -230,7 +281,7 @@ export function BriefingStep({
         </h2>
         <p className="text-muted-foreground text-sm max-w-md mx-auto">
           Write your video script and choose a voice that matches your
-          character's personality.
+          character&apos;s personality.
         </p>
       </div>
 
@@ -429,11 +480,8 @@ export function BriefingStep({
                   {voice.style}
                 </Badge>
 
-                {/* Preview button placeholder */}
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <Mic className="size-3" />
-                  <span>Preview voice</span>
-                </div>
+                {/* Preview voice button */}
+                <VoicePreviewButton voice={voice} />
               </button>
             );
           })}

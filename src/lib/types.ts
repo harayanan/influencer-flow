@@ -18,6 +18,8 @@ export interface VoiceProfile {
   pitch: number; // 0-100
   stability: number; // 0-100
   preview_url?: string;
+  geminiVoice: string; // Gemini TTS voice name (e.g. "Puck", "Kore")
+  stylePrefix: string; // Style instruction prepended to TTS text
 }
 
 export interface BRollClip {
@@ -63,8 +65,12 @@ export interface ProjectState {
   storyboard: StoryboardSegment[];
   // Step 4: Generate
   generationProgress: number;
-  generationStatus: "idle" | "analyzing" | "rendering" | "subtitling" | "finalizing" | "complete" | "error";
+  generationStatus: "idle" | "generating-audio" | "generating-video" | "polling-video" | "complete" | "error";
   videoUrl: string | null;
+  audioUrl: string | null;
+  audioDuration: number | null;
+  videoClipUrl: string | null;
+  jobId: string | null;
   // Step 5: Refine
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -48,6 +48,10 @@ const initialState: ProjectState = {
   generationProgress: 0,
   generationStatus: "idle",
   videoUrl: null,
+  audioUrl: null,
+  audioDuration: null,
+  videoClipUrl: null,
+  jobId: null,
   subtitleStyle: "hormozi",
   subtitles: [],
   logoFile: null,
@@ -59,6 +63,7 @@ export function Wizard() {
   const [state, setState] = useState<ProjectState>(initialState);
   const [selectedLanguage, setSelectedLanguage] =
     useState<IndianLanguage | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const updateState = useCallback(
     (updates: Partial<ProjectState>) =>
@@ -159,7 +164,6 @@ export function Wizard() {
         musicTrack: "Upbeat Energy",
       });
     } catch {
-      // Fallback: create simple storyboard from script
       const words = state.script.split(/\s+/).length;
       const duration = words / 2.5;
       updateState({
@@ -185,27 +189,141 @@ export function Wizard() {
     }
   }, [state.script, updateState]);
 
-  const simulateGeneration = useCallback(async () => {
-    const statuses: ProjectState["generationStatus"][] = [
-      "analyzing",
-      "rendering",
-      "subtitling",
-      "finalizing",
-      "complete",
-    ];
+  const realGeneration = useCallback(async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-    for (let i = 0; i < statuses.length; i++) {
+    try {
+      // Step 1: Generate audio (10% → 40%)
       updateState({
-        generationStatus: statuses[i],
-        generationProgress: ((i + 1) / statuses.length) * 100,
+        generationStatus: "generating-audio",
+        generationProgress: 10,
       });
-      if (statuses[i] !== "complete") {
-        await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1000));
-      }
-    }
 
-    updateState({ videoUrl: "generated" });
-  }, [updateState]);
+      const voice = state.selectedVoice;
+      if (!voice) return;
+
+      const audioRes = await fetch("/api/generate-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          script: state.script,
+          geminiVoice: voice.geminiVoice,
+          stylePrefix: voice.stylePrefix,
+          language: selectedLanguage || undefined,
+        }),
+        signal: controller.signal,
+      });
+
+      const audioData = await audioRes.json();
+      if (controller.signal.aborted) return;
+
+      updateState({
+        generationProgress: 40,
+        audioUrl: audioData.audioDataUrl || null,
+        audioDuration: audioData.durationSec || null,
+      });
+
+      // Step 2: Start video generation (50%)
+      updateState({
+        generationStatus: "generating-video",
+        generationProgress: 50,
+      });
+
+      // Convert image to base64 for Veo
+      let imageBase64 = "";
+      if (state.imagePreview) {
+        // imagePreview is a data URL — extract the base64 part
+        const commaIndex = state.imagePreview.indexOf(",");
+        imageBase64 =
+          commaIndex >= 0
+            ? state.imagePreview.slice(commaIndex + 1)
+            : state.imagePreview;
+      }
+
+      const videoRes = await fetch("/api/generate-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64,
+          prompt:
+            "Animate this person with subtle natural movements: slight head turns, blinking, and gentle facial expressions. Keep the background stable. Cinematic lighting.",
+          durationSeconds: 8,
+        }),
+        signal: controller.signal,
+      });
+
+      const videoData = await videoRes.json();
+      if (controller.signal.aborted) return;
+
+      const jobId = videoData.jobId;
+      updateState({
+        jobId,
+        generationStatus: "polling-video",
+        generationProgress: 60,
+      });
+
+      // Step 3: Poll for video completion (60% → 95%)
+      let attempts = 0;
+      const maxAttempts = 60; // 5 minutes at 5s intervals
+
+      while (attempts < maxAttempts) {
+        if (controller.signal.aborted) return;
+
+        await new Promise((r) => setTimeout(r, 5000));
+        if (controller.signal.aborted) return;
+
+        attempts++;
+
+        try {
+          const pollRes = await fetch(`/api/generate-video/${jobId}`, {
+            signal: controller.signal,
+          });
+          const pollData = await pollRes.json();
+
+          if (pollData.status === "complete") {
+            updateState({
+              videoClipUrl: pollData.videoDataUrl || null,
+              generationProgress: 100,
+              generationStatus: "complete",
+              videoUrl: "generated",
+            });
+            return;
+          }
+
+          if (pollData.status === "error") {
+            // Video failed but audio succeeded — still complete
+            updateState({
+              generationProgress: 100,
+              generationStatus: "complete",
+              videoUrl: "generated",
+            });
+            return;
+          }
+
+          // Update progress (map poll progress 0-100 to our 60-95 range)
+          const mappedProgress = 60 + (pollData.progress / 100) * 35;
+          updateState({ generationProgress: Math.round(mappedProgress) });
+        } catch {
+          // Transient poll error — keep trying
+        }
+      }
+
+      // Timed out — still complete with audio
+      updateState({
+        generationProgress: 100,
+        generationStatus: "complete",
+        videoUrl: "generated",
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      console.error("Generation error:", err);
+      updateState({
+        generationStatus: "error",
+        generationProgress: 0,
+      });
+    }
+  }, [state.selectedVoice, state.script, state.imagePreview, selectedLanguage, updateState]);
 
   const goNext = useCallback(async () => {
     if (state.step === 2) {
@@ -217,17 +335,26 @@ export function Wizard() {
         step: 4 as ProjectState["step"],
         generationStatus: "idle",
         generationProgress: 0,
+        audioUrl: null,
+        audioDuration: null,
+        videoClipUrl: null,
+        jobId: null,
       }));
-      setTimeout(() => simulateGeneration(), 500);
+      setTimeout(() => realGeneration(), 500);
       return;
     }
     setState((prev) => ({
       ...prev,
       step: Math.min(prev.step + 1, 5) as ProjectState["step"],
     }));
-  }, [state.step, analyzeScript, simulateGeneration]);
+  }, [state.step, analyzeScript, realGeneration]);
 
   const goBack = useCallback(() => {
+    // Abort any in-progress generation when going back
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
     setState((prev) => ({
       ...prev,
       step: Math.max(prev.step - 1, 1) as ProjectState["step"],
@@ -322,6 +449,9 @@ export function Wizard() {
             status={state.generationStatus}
             videoUrl={state.videoUrl}
             imagePreview={state.imagePreview}
+            audioUrl={state.audioUrl}
+            audioDuration={state.audioDuration}
+            videoClipUrl={state.videoClipUrl}
           />
         )}
         {state.step === 5 && (

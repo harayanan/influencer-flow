@@ -1,7 +1,15 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback } from "react";
-import { Play, Pause, Sparkles, Check, Loader2, Volume2 } from "lucide-react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import {
+  Play,
+  Pause,
+  Sparkles,
+  Check,
+  Loader2,
+  Volume2,
+  Music,
+} from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -12,31 +20,30 @@ interface GenerateStepProps {
   status: ProjectState["generationStatus"];
   videoUrl: string | null;
   imagePreview: string | null;
+  audioUrl: string | null;
+  audioDuration: number | null;
+  videoClipUrl: string | null;
 }
 
 const STATUS_CONFIG: Record<
   Exclude<ProjectState["generationStatus"], "idle" | "error">,
   { label: string; detail: string }
 > = {
-  analyzing: {
-    label: "Analyzing script...",
-    detail: "Parsing your script and identifying B-roll opportunities",
+  "generating-audio": {
+    label: "Generating narration...",
+    detail: "Synthesizing voice audio with Gemini TTS",
   },
-  rendering: {
-    label: "Rendering avatar...",
-    detail: "Generating lip-synced talking head animation",
+  "generating-video": {
+    label: "Starting video generation...",
+    detail: "Sending image to Veo for animation",
   },
-  subtitling: {
-    label: "Adding subtitles...",
-    detail: "Applying dynamic captions and text effects",
-  },
-  finalizing: {
-    label: "Finalizing...",
-    detail: "Compositing video layers and encoding output",
+  "polling-video": {
+    label: "Animating image...",
+    detail: "Generating 8-second animated preview clip",
   },
   complete: {
     label: "Complete!",
-    detail: "Your video is ready to preview and refine",
+    detail: "Your audio narration and video preview are ready",
   },
 };
 
@@ -53,6 +60,9 @@ export function GenerateStep({
   progress,
   status,
   imagePreview,
+  audioUrl,
+  audioDuration,
+  videoClipUrl,
 }: GenerateStepProps) {
   const isGenerating =
     status !== "idle" && status !== "complete" && status !== "error";
@@ -61,13 +71,15 @@ export function GenerateStep({
   const [isPlaying, setIsPlaying] = useState(false);
   const [playProgress, setPlayProgress] = useState(0);
   const [currentSubtitleIndex, setCurrentSubtitleIndex] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const currentConfig = useMemo(() => {
     if (status === "idle" || status === "error") return null;
     return STATUS_CONFIG[status];
   }, [status]);
 
-  // Simulate video playback
+  // Simulate video playback progress
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
@@ -95,39 +107,65 @@ export function GenerateStep({
 
   const togglePlay = useCallback(() => {
     if (!isComplete || !imagePreview) return;
-    setIsPlaying((prev) => !prev);
+
+    const newPlaying = !isPlaying;
+    setIsPlaying(newPlaying);
     if (playProgress >= 100) setPlayProgress(0);
-  }, [isComplete, imagePreview, playProgress]);
+
+    // Sync audio playback
+    if (audioRef.current) {
+      if (newPlaying) {
+        audioRef.current.play().catch(() => {});
+      } else {
+        audioRef.current.pause();
+      }
+    }
+
+    // Sync video playback
+    if (videoRef.current) {
+      if (newPlaying) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isComplete, imagePreview, isPlaying, playProgress]);
+
+  const totalDuration = audioDuration || 90;
 
   const formatPlayTime = (pct: number) => {
-    const totalSeconds = 90;
-    const current = Math.floor((pct / 100) * totalSeconds);
+    const current = Math.floor((pct / 100) * totalDuration);
     const m = Math.floor(current / 60);
     const s = current % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const formatDuration = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
   // Progress steps for the stepper
-  const steps = [
-    { key: "analyzing", label: "Analyze" },
-    { key: "rendering", label: "Render" },
-    { key: "subtitling", label: "Subtitles" },
-    { key: "finalizing", label: "Finalize" },
+  const generationSteps = [
+    { key: "generating-audio", label: "Audio" },
+    { key: "generating-video", label: "Video" },
+    { key: "polling-video", label: "Animate" },
     { key: "complete", label: "Done" },
   ] as const;
 
-  const currentStepIndex = steps.findIndex((s) => s.key === status);
+  const currentStepIndex = generationSteps.findIndex((s) => s.key === status);
 
   return (
     <div className="flex flex-col items-center gap-8 w-full max-w-xl mx-auto">
       {/* Header */}
       <div className="text-center space-y-2">
         <h2 className="text-2xl font-bold tracking-tight">
-          {isComplete ? "Video Generated" : "Generating Your Video"}
+          {isComplete ? "Generation Complete" : "Generating Your Video"}
         </h2>
         <p className="text-muted-foreground text-sm max-w-md">
           {isComplete
-            ? "Click the video preview to play. Proceed to Refine to customize."
+            ? "Your AI narration is ready. Click the preview to play."
             : status === "idle"
               ? "Click generate to begin creating your video."
               : "Sit tight while we bring your vision to life."}
@@ -139,7 +177,7 @@ export function GenerateStep({
         <div className="w-full space-y-6">
           {/* Step indicators */}
           <div className="flex items-center justify-between px-2">
-            {steps.map((step, i) => {
+            {generationSteps.map((step, i) => {
               const isStepComplete = i < currentStepIndex;
               const isStepActive = i === currentStepIndex;
 
@@ -219,15 +257,31 @@ export function GenerateStep({
         {isComplete && imagePreview ? (
           /* Completed: interactive video preview */
           <div className="relative h-full w-full overflow-hidden">
-            {/* Image with Ken Burns effect when playing */}
-            <img
-              src={imagePreview}
-              alt="Generated video preview"
-              className={cn(
-                "h-full w-full object-cover transition-transform duration-[10000ms] ease-linear",
-                isPlaying ? "scale-110 translate-y-[-3%]" : "scale-100"
-              )}
-            />
+            {/* Video clip or image with Ken Burns effect */}
+            {videoClipUrl ? (
+              <video
+                ref={videoRef}
+                src={videoClipUrl}
+                className="h-full w-full object-cover"
+                loop
+                muted
+                playsInline
+              />
+            ) : (
+              <img
+                src={imagePreview}
+                alt="Generated video preview"
+                className={cn(
+                  "h-full w-full object-cover transition-transform duration-[10000ms] ease-linear",
+                  isPlaying ? "scale-110 translate-y-[-3%]" : "scale-100"
+                )}
+              />
+            )}
+
+            {/* Hidden audio element */}
+            {audioUrl && (
+              <audio ref={audioRef} src={audioUrl} preload="auto" />
+            )}
 
             {/* Dark overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/30" />
@@ -267,7 +321,7 @@ export function GenerateStep({
               </span>
             </div>
 
-            {/* Top bar: duration + sound */}
+            {/* Top bar: badge + sound */}
             <div className="absolute top-3 inset-x-3 flex items-center justify-between">
               <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1">
                 <div
@@ -304,20 +358,18 @@ export function GenerateStep({
 
             {/* Video controls bar at bottom */}
             <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent pt-6 pb-2 px-3 space-y-1.5">
-              {/* Progress bar */}
               <div className="h-1 rounded-full bg-white/20 overflow-hidden">
                 <div
                   className="h-full bg-violet-500 rounded-full transition-all duration-100 ease-linear"
                   style={{ width: `${playProgress}%` }}
                 />
               </div>
-              {/* Time */}
               <div className="flex items-center justify-between">
                 <span className="text-[9px] text-white/70 font-mono tabular-nums">
                   {formatPlayTime(playProgress)}
                 </span>
                 <span className="text-[9px] text-white/70 font-mono tabular-nums">
-                  1:30
+                  {formatDuration(totalDuration)}
                 </span>
               </div>
             </div>
@@ -327,7 +379,6 @@ export function GenerateStep({
           <div className="flex h-full w-full flex-col items-center justify-center gap-4">
             {isGenerating ? (
               <>
-                {/* Pulsing animation */}
                 <div className="relative">
                   <div className="absolute inset-0 animate-ping rounded-full bg-violet-400/20" />
                   <div className="absolute -inset-3 animate-pulse rounded-full bg-violet-400/10" />
@@ -343,8 +394,6 @@ export function GenerateStep({
                     {currentConfig?.label}
                   </p>
                 </div>
-
-                {/* Animated bars at bottom */}
                 <div className="absolute bottom-4 flex items-end gap-1">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div
@@ -374,7 +423,6 @@ export function GenerateStep({
               </>
             ) : (
               <>
-                {/* Idle state */}
                 <div className="flex items-center justify-center rounded-full bg-white/10 p-5">
                   <Play className="size-10 text-white/30" />
                 </div>
@@ -387,7 +435,7 @@ export function GenerateStep({
         )}
       </div>
 
-      {/* Action buttons when complete */}
+      {/* Result summary when complete */}
       {isComplete && (
         <div className="flex flex-col items-center gap-3 w-full">
           <div className="flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -395,8 +443,37 @@ export function GenerateStep({
               <Check className="size-3 text-white" />
             </div>
             <span className="text-sm font-medium text-emerald-700">
-              Video generated successfully — click to preview
+              Generation complete — click preview to play
             </span>
+          </div>
+
+          {/* Media summary cards */}
+          <div className="flex gap-3 w-full max-w-sm">
+            {/* Audio card */}
+            <div className="flex-1 rounded-lg border bg-card p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Music className="size-3.5 text-violet-600" />
+                <span className="text-xs font-semibold">Full AI Narration</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {audioUrl
+                  ? `~${audioDuration}s audio`
+                  : "Audio unavailable"}
+              </p>
+            </div>
+
+            {/* Video card */}
+            <div className="flex-1 rounded-lg border bg-card p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Volume2 className="size-3.5 text-indigo-600" />
+                <span className="text-xs font-semibold">Animated Preview</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {videoClipUrl
+                  ? "8-second Veo clip"
+                  : "Ken Burns fallback"}
+              </p>
+            </div>
           </div>
 
           {!isPlaying && (

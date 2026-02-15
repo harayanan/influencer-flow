@@ -9,8 +9,8 @@
 - **Framework:** Next.js 16.1.6 + React 19 + TypeScript
 - **Styling:** Tailwind CSS 4 + shadcn/ui (Radix primitives)
 - **Icons:** Lucide React
-- **AI:** Google Gemini 2.0 Flash (`@google/generative-ai`) for script generation + analysis
-- **Video APIs (planned):** HeyGen/D-ID (lip-sync), ElevenLabs (voice), Pexels (B-roll)
+- **AI:** Google-only stack — Gemini 2.0 Flash (text), Gemini 2.5 Flash TTS (voice), Veo 2 (image-to-video)
+- **B-roll:** Pexels API (route ready)
 - **Deployment:** Vercel
 - **GitHub:** https://github.com/harayanan/influencer-flow
 - **Vercel:** https://influencer-flow-iota.vercel.app
@@ -34,10 +34,11 @@ src/
 │   └── api/
 │       ├── analyze-script/route.ts    # POST — script keyword/sentiment analysis
 │       ├── generate-script/route.ts   # POST — AI script generation (Gemini + fallback)
+│       ├── generate-audio/route.ts    # POST — TTS via Gemini 2.5 Flash
 │       ├── broll/route.ts             # GET — B-roll search (Pexels + mock)
 │       ├── voices/route.ts            # GET — voice profiles
-│       ├── generate-video/route.ts    # POST — video generation queue
-│       └── generate-video/[jobId]/route.ts  # GET — job status polling
+│       ├── generate-video/route.ts    # POST — video generation via Veo 2
+│       └── generate-video/[jobId]/route.ts  # GET — Veo job status polling
 ├── components/
 │   ├── wizard.tsx                     # Main orchestrator (state, steps, language filter)
 │   ├── steps/
@@ -49,7 +50,9 @@ src/
 │   └── ui/                            # 14 shadcn/ui components
 └── lib/
     ├── types.ts                       # TypeScript interfaces (IndianLanguage, VoiceProfile, etc.)
-    ├── voices.ts                      # 12 Indian voice profiles + language list
+    ├── voices.ts                      # 12 Indian voice profiles + Gemini voice mappings
+    ├── gemini.ts                      # Shared Gemini client (TTS, Veo, text model)
+    ├── job-store.ts                   # In-memory Veo job tracking
     ├── music.ts                       # 6 music tracks + mood matching
     └── utils.ts                       # shadcn cn() utility
 ```
@@ -66,8 +69,6 @@ src/
 ## Environment Variables
 
 ```
-GEMINI_API_KEY=         # Google Gemini for script generation + analysis (SDK installed)
+GEMINI_API_KEY=         # Single key for all AI: Gemini Flash (text), Gemini TTS (voice), Veo 2 (video)
 PEXELS_API_KEY=         # Pexels for B-roll stock footage (route ready)
-HEYGEN_API_KEY=         # HeyGen API for avatar animation (not yet integrated)
-ELEVENLABS_API_KEY=     # ElevenLabs for voice synthesis (not yet integrated)
 ```

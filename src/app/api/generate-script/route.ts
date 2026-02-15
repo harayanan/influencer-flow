@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getGeminiFlash } from "@/lib/gemini";
 
 interface GenerateScriptRequest {
   topic: string;
@@ -22,16 +23,9 @@ export async function POST(request: Request) {
     const tone = body.tone || "professional";
     const language = body.language || "English";
 
-    // TODO: Replace with Gemini API when GEMINI_API_KEY is set
-    // const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    // const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    // const result = await model.generateContent(`Write a ${targetWords}-word ...`);
-
     if (process.env.GEMINI_API_KEY) {
       try {
-        const { GoogleGenerativeAI } = await import("@google/generative-ai");
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = getGeminiFlash();
 
         const prompt = `Write a short-form video script about "${body.topic}" for social media (TikTok/Reels/Shorts).
 
